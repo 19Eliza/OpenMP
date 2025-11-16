@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/Ellipsoids.dir/main.cpp.o -o Ellipsoids 
