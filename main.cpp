@@ -7,6 +7,8 @@
 #include <fstream>
 #include <iomanip>
 
+#include <omp.h>
+
 using namespace std;
 
 // =============================================================
@@ -16,19 +18,6 @@ struct Ellipsoid {
     double a, b, c;  // полуоси
 };
 
-using tripleEllipsoid = std::array<Ellipsoid, 3>; /// {E1,E2,E3}, brain(E1), skull(E2), skin(E3)
-
-// Тестовые случаи
-struct TestCase{
-    tripleEllipsoid test1{ Ellipsoid{30,40,50}, Ellipsoid{35,45,55}, Ellipsoid{40,50,60} };
-    tripleEllipsoid test2{Ellipsoid {30.0, 40.0, 50.0}, Ellipsoid {30.5, 40.5, 50.5}, Ellipsoid {31.0, 41.0, 51.0} };
-    std::vector<tripleEllipsoid> testEllipsoid{test1,test2};// множество тестовых эллипсоидов
-    int countPointX = 32;
-    int countPointY = 32;
-    int countPointZ = 32;
-    std::unordered_set<int> Nsamples{2048}; // количество точек разбросанных в одном элементе
-
-};
 
 // Проверка нахождения точки внутри эллипсоида
 bool checkInsideEllipsoid(double x, double y, double z, const Ellipsoid& E)
@@ -133,30 +122,15 @@ void writeVoxelLine(ofstream& fout,
 
 int main()
 {
-
     Ellipsoid E1{30.0, 40.0, 50.0}; // brain
     Ellipsoid E2{30.5, 40.5, 50.5}; // skull
     Ellipsoid E3{31.0, 41.0, 51.0}; // skin
 
-    // ----------------------------------------------
-    // Минимальный осевой параллелепипед
-    // ----------------------------------------------
-    double xmin = -E3.a;
-    double xmax =  E3.a;
+    double xmin = -E3.a, xmax = E3.a;
+    double ymin = -E3.b, ymax = E3.b;
+    double zmin = -E3.c, zmax = E3.c;
 
-    double ymin = -E3.b;
-    double ymax =  E3.b;
-
-    double zmin = -E3.c;
-    double zmax =  E3.c;
-
-    // ----------------------------------------------
-    // Строим 3D-сетку
-    // ----------------------------------------------
-    const int Nx = 32;   // число точек по x
-    const int Ny = 32;   // число точек по y
-    const int Nz = 32;   // число точек по z
-
+    const int Nx = 32, Ny = 32, Nz = 32;
     double dx = (xmax - xmin) / Nx;
     double dy = (ymax - ymin) / Ny;
     double dz = (zmax - zmin) / Nz;
@@ -165,40 +139,58 @@ int main()
 
     ofstream fout("result.txt");
     writeHeader(fout);
-    fout.precision(8);
 
     // ----------------------------------------------
-    //  Перебираем воксели
+    // Параллельный блок
     // ----------------------------------------------
-    for (int i = 0; i < Nx; i++)
-        for (int j = 0; j < Ny; j++)
-            for (int k = 0; k < Nz; k++)
-            {
-                double x0 = xmin + i*dx;
-                double x1 = x0 + dx;
+    #pragma omp parallel
+    {
+        std::ostringstream local_buffer;  // каждый поток пишет в свой буфер
 
-                double y0 = ymin + j*dy;
-                double y1 = y0 + dy;
+        cout << "Number of threads = " << omp_get_num_threads() << endl;
 
-                double z0 = zmin + k*dz;
-                double z1 = z0 + dz;
-
-                double frac[4];
-                MonteCarloMethod(x0,x1, y0,y1, z0,z1,
-                                          E1, E2, E3,
-                                          Nsamples,
-                                          frac);
-
-
-                // Сохраняем только если точка попала в какой нибудь слой
-                if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
+        #pragma omp for collapse(3) schedule(dynamic)
+        for (int i = 0; i < Nx; i++)
+            for (int j = 0; j < Ny; j++)
+                for (int k = 0; k < Nz; k++)
                 {
-                    writeVoxelLine(fout, i, j, k, frac);
+                    double x0 = xmin + i*dx;
+                    double x1 = x0 + dx;
+                    double y0 = ymin + j*dy;
+                    double y1 = y0 + dy;
+                    double z0 = zmin + k*dz;
+                    double z1 = z0 + dz;
+
+                    double frac[4];
+                    MonteCarloMethod(x0,x1, y0,y1, z0,z1, E1, E2, E3, Nsamples, frac);
+
+                    int tid = omp_get_thread_num();
+
+                    #pragma omp critical
+                    cout << "Element (" << i << "," << j << "," << k << ") processed by thread " << tid << endl;
+
+                    if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
+                    {
+                        local_buffer << left
+                                     << setw(5)  << i
+                                     << setw(5)  << j
+                                     << setw(5)  << k
+                                     << setw(12) << frac[0]
+                                     << setw(12) << frac[1]
+                                     << setw(12) << frac[2]
+                                     << setw(12) << frac[3]
+                                     << "\n";
+                    }
                 }
-            }
+
+        // Синхронизация: поток безопасно пишет свой буфер в файл
+        #pragma omp critical
+        {
+            fout << local_buffer.str();
+        }
+    } // конец параллельного блока
 
     fout.close();
-    cout << "Date is saved to voxels.txt\n";
-
+    cout << "Data is saved to result.txt\n";
     return 0;
 }
