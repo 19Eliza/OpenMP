@@ -145,9 +145,7 @@ int main()
     // ----------------------------------------------
     #pragma omp parallel
     {
-        std::ostringstream local_buffer;  // каждый поток пишет в свой буфер
-
-        cout << "Number of threads = " << omp_get_num_threads() << endl;
+        std::ostringstream local_buffer;  
 
         #pragma omp for collapse(3) schedule(dynamic)
         for (int i = 0; i < Nx; i++)
@@ -164,31 +162,19 @@ int main()
                     double frac[4];
                     MonteCarloMethod(x0,x1, y0,y1, z0,z1, E1, E2, E3, Nsamples, frac);
 
-                    int tid = omp_get_thread_num();
-
-                    #pragma omp critical
-                    cout << "Element (" << i << "," << j << "," << k << ") processed by thread " << tid << endl;
 
                     if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
                     {
-                        local_buffer << left
-                                     << setw(5)  << i
-                                     << setw(5)  << j
-                                     << setw(5)  << k
-                                     << setw(12) << frac[0]
-                                     << setw(12) << frac[1]
-                                     << setw(12) << frac[2]
-                                     << setw(12) << frac[3]
-                                     << "\n";
+                        #pragma omp critical
+                        writeVoxelLine(fout,i,j,k,frac);
                     }
                 }
 
-        // Синхронизация: поток безопасно пишет свой буфер в файл
         #pragma omp critical
         {
             fout << local_buffer.str();
         }
-    } // конец параллельного блока
+    } 
 
     fout.close();
     cout << "Data is saved to result.txt\n";
