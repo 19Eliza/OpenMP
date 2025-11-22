@@ -9,26 +9,11 @@
 
 #include"FormatFileOuter.h"
 #include"Ellipsoid.h"
+#include"TestCaseStruct.h"
 
 #include <omp.h>
 
 using namespace std;
-
-
-using tripleEllipsoid = std::array<Ellipsoid, 3>; /// {E1,E2,E3}, brain(E1), skull(E2), skin(E3)
-
-// Тестовые случаи
-struct TestCase{
-    inline static const tripleEllipsoid test1{ Ellipsoid{30,40,50}, Ellipsoid{35,45,55}, Ellipsoid{40,50,60} };
-    inline static const tripleEllipsoid test2{Ellipsoid {30.0, 40.0, 50.0}, Ellipsoid {30.5, 40.5, 50.5}, Ellipsoid {31.0, 41.0, 51.0} };
-    inline static const std::vector<tripleEllipsoid> testEllipsoid{test1,test2};// множество тестовых эллипсоидов
-    static const int countPointX = 32;
-    static const int countPointY = 32;
-    static const int countPointZ = 32;
-    static const int Nsamples{2048}; // количество точек разбросанных в одном элементе
-
-};
-
 
 // Определение слоя для точки
 // 0 = brain(E1), 1 = skull(E2), 2 = skin(E3), 3 = outside
@@ -91,62 +76,65 @@ void MonteCarloMethod(
 
 
 int main()
-{
-    Ellipsoid E1{30.0, 40.0, 50.0}; // brain
-    Ellipsoid E2{30.5, 40.5, 50.5}; // skull
-    Ellipsoid E3{31.0, 41.0, 51.0}; // skin
+{   
+    for(int i=0;i<TestCase::testEllipsoid.size();++i){
 
-    double xmin = -E3.a, xmax = E3.a;
-    double ymin = -E3.b, ymax = E3.b;
-    double zmin = -E3.c, zmax = E3.c;
+        auto test = TestCase::testEllipsoid[i];
 
-    int Nx = TestCase::countPointX, Ny = TestCase::countPointY, Nz = TestCase::countPointZ;
-    double dx = (xmax - xmin) / Nx;
-    double dy = (ymax - ymin) / Ny;
-    double dz = (zmax - zmin) / Nz;
+        Ellipsoid E1{test[0]}; // brain
+        Ellipsoid E2{test[1]}; // skull
+        Ellipsoid E3{test[2]}; // skin
 
-    int Nsamples = TestCase::Nsamples;
+        double xmin = -E3.a, xmax = E3.a;
+        double ymin = -E3.b, ymax = E3.b;
+        double zmin = -E3.c, zmax = E3.c;
 
-    ofstream fout("result.txt");
-    writeHeader(fout);
+        int Nx = TestCase::countPointX, Ny = TestCase::countPointY, Nz = TestCase::countPointZ;
+        double dx = (xmax - xmin) / Nx;
+        double dy = (ymax - ymin) / Ny;
+        double dz = (zmax - zmin) / Nz;
 
-    // ----------------------------------------------
-    // Параллельный блок
-    // ----------------------------------------------
-    #pragma omp parallel
-    {
-        std::ostringstream local_buffer;  
+        int Nsamples = TestCase::Nsamples;
 
-        #pragma omp for collapse(3) schedule(dynamic)
-        for (int i = 0; i < Nx; i++)
-            for (int j = 0; j < Ny; j++)
-                for (int k = 0; k < Nz; k++)
-                {
-                    double x0 = xmin + i*dx;
-                    double x1 = x0 + dx;
-                    double y0 = ymin + j*dy;
-                    double y1 = y0 + dy;
-                    double z0 = zmin + k*dz;
-                    double z1 = z0 + dz;
+        string fileName = "resultForTest"+to_string(i+1)+".txt";
+        ofstream fout(fileName);
+        writeHeader(fout);
 
-                    double frac[4];
-                    MonteCarloMethod(x0,x1, y0,y1, z0,z1, E1, E2, E3, Nsamples, frac);
-
-
-                    if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
-                    {
-                        #pragma omp critical
-                        writeVoxelLine(fout,i,j,k,frac);
-                    }
-                }
-
-        #pragma omp critical
+        #pragma omp parallel
         {
-            fout << local_buffer.str();
-        }
-    } 
+            std::ostringstream local_buffer;  
 
-    fout.close();
-    cout << "Data is saved to result.txt\n";
+            #pragma omp for collapse(3) schedule(dynamic)
+            for (int i = 0; i < Nx; i++)
+                for (int j = 0; j < Ny; j++)
+                    for (int k = 0; k < Nz; k++)
+                    {
+                        double x0 = xmin + i*dx;
+                        double x1 = x0 + dx;
+                        double y0 = ymin + j*dy;
+                        double y1 = y0 + dy;
+                        double z0 = zmin + k*dz;
+                        double z1 = z0 + dz;
+
+                        double frac[4];
+                        MonteCarloMethod(x0,x1, y0,y1, z0,z1, E1, E2, E3, Nsamples, frac);
+
+
+                        if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
+                        {
+                            #pragma omp critical
+                            writeVoxelLine(fout,i,j,k,frac);
+                        }
+                    }
+
+            #pragma omp critical
+            {
+                fout << local_buffer.str();
+            }
+        } 
+
+        fout.close();
+        cout << "Data is saved to" <<fileName<<endl;
+    }
     return 0;
 }
