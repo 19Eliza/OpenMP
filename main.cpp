@@ -7,26 +7,28 @@
 #include <fstream>
 #include <iomanip>
 
+#include"FormatFileOuter.h"
+#include"Ellipsoid.h"
+
 #include <omp.h>
 
 using namespace std;
 
-// =============================================================
-//  КОНЦЕНТРИЧЕСКИЕ ЭЛЛИПСОИДЫ
-// =============================================================
-struct Ellipsoid {
-    double a, b, c;  // полуоси
+
+using tripleEllipsoid = std::array<Ellipsoid, 3>; /// {E1,E2,E3}, brain(E1), skull(E2), skin(E3)
+
+// Тестовые случаи
+struct TestCase{
+    inline static const tripleEllipsoid test1{ Ellipsoid{30,40,50}, Ellipsoid{35,45,55}, Ellipsoid{40,50,60} };
+    inline static const tripleEllipsoid test2{Ellipsoid {30.0, 40.0, 50.0}, Ellipsoid {30.5, 40.5, 50.5}, Ellipsoid {31.0, 41.0, 51.0} };
+    inline static const std::vector<tripleEllipsoid> testEllipsoid{test1,test2};// множество тестовых эллипсоидов
+    static const int countPointX = 32;
+    static const int countPointY = 32;
+    static const int countPointZ = 32;
+    static const int Nsamples{2048}; // количество точек разбросанных в одном элементе
+
 };
 
-
-// Проверка нахождения точки внутри эллипсоида
-bool checkInsideEllipsoid(double x, double y, double z, const Ellipsoid& E)
-{
-    double nx = x / E.a;
-    double ny = y / E.b;
-    double nz = z / E.c;
-    return (nx*nx + ny*ny + nz*nz) <= 1.0;
-}
 
 // Определение слоя для точки
 // 0 = brain(E1), 1 = skull(E2), 2 = skin(E3), 3 = outside
@@ -88,38 +90,6 @@ void MonteCarloMethod(
 }
 
 
-void writeHeader(ofstream& fout)
-{
-    fout << left
-         << setw(5)  << "i"
-         << setw(5)  << "j"
-         << setw(5)  << "k"
-         << setw(12) << "brain"
-         << setw(12) << "skull"
-         << setw(12) << "skin"
-         << setw(12) << "outside"
-         << "\n";
-
-    fout << fixed << setprecision(6); 
-}
-
-// Функция форматированного вывода строки
-void writeVoxelLine(ofstream& fout,
-                    int i, int j, int k,
-                    const double frac[4])
-{
-    fout << left
-         << setw(5)  << i
-         << setw(5)  << j
-         << setw(5)  << k
-         << setw(12) << frac[0]
-         << setw(12) << frac[1]
-         << setw(12) << frac[2]
-         << setw(12) << frac[3]
-         << "\n";
-}
-
-
 int main()
 {
     Ellipsoid E1{30.0, 40.0, 50.0}; // brain
@@ -130,12 +100,12 @@ int main()
     double ymin = -E3.b, ymax = E3.b;
     double zmin = -E3.c, zmax = E3.c;
 
-    const int Nx = 32, Ny = 32, Nz = 32;
+    int Nx = TestCase::countPointX, Ny = TestCase::countPointY, Nz = TestCase::countPointZ;
     double dx = (xmax - xmin) / Nx;
     double dy = (ymax - ymin) / Ny;
     double dz = (zmax - zmin) / Nz;
 
-    const int Nsamples = 2048;
+    int Nsamples = TestCase::Nsamples;
 
     ofstream fout("result.txt");
     writeHeader(fout);
