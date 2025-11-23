@@ -28,7 +28,7 @@ int determineLayer(double x, double y, double z,
     return 3;
 }
 
-// случайный коэффициент от 0 до 1
+// Случайный коэффициент от 0 до 1
 inline double randomCoeff()
 {
     return double(rand()) / RAND_MAX; 
@@ -47,7 +47,9 @@ void randomPointInElement(
 }
 
 // =============================================================
-//   MONTE-CARLO
+//   Метод Монте-Карло. Приближённо оценивает объём каждого эллипсоида в элементе. 
+//   В методе внутри каждого элемента разбрасываются равномерно случайные точки. 
+//   Далее определяет, к какому слою принадлежит каждая точка.
 // =============================================================
 void MonteCarloMethod(
     double x0, double x1,
@@ -85,17 +87,21 @@ int main()
         Ellipsoid E2{test[1]}; // skull
         Ellipsoid E3{test[2]}; // skin
 
+        /// Минимальный ограничивающий параллелепипед
         double xmin = -E3.a, xmax = E3.a;
         double ymin = -E3.b, ymax = E3.b;
         double zmin = -E3.c, zmax = E3.c;
 
-        int Nx = TestCase::countPointX, Ny = TestCase::countPointY, Nz = TestCase::countPointZ;
-        double dx = (xmax - xmin) / Nx;
+        int Nx = TestCase::countPointX, Ny = TestCase::countPointY, Nz = TestCase::countPointZ; /// количество точек разбиения по каждой оси
+
+        /// шаги сетки 
+        double dx = (xmax - xmin) / Nx; 
         double dy = (ymax - ymin) / Ny;
         double dz = (zmax - zmin) / Nz;
 
         int Nsamples = TestCase::Nsamples;
 
+        // Файл вывода результатов
         string fileName = "resultForTest"+to_string(i+1)+".txt";
         ofstream fout(fileName);
         writeHeader(fout);
@@ -105,9 +111,9 @@ int main()
             std::ostringstream local_buffer;  
 
             #pragma omp for collapse(3) schedule(dynamic)
-            for (int i = 0; i < Nx; i++)
-                for (int j = 0; j < Ny; j++)
-                    for (int k = 0; k < Nz; k++)
+            for (int i = 0; i < Nx; i++) // номер элемента вдоль оси X 
+                for (int j = 0; j < Ny; j++) // номер элемента вдоль оси Y
+                    for (int k = 0; k < Nz; k++) // номер элемента вдоль оси Z
                     {
                         double x0 = xmin + i*dx;
                         double x1 = x0 + dx;
@@ -119,7 +125,7 @@ int main()
                         double frac[4];
                         MonteCarloMethod(x0,x1, y0,y1, z0,z1, E1, E2, E3, Nsamples, frac);
 
-
+                        // Вывод в файл с результаттами, если хотя бы одна доля в элементе > 0
                         if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
                         {
                             #pragma omp critical

@@ -5,6 +5,7 @@
 
 using namespace std;
 
+// Функция форматированного вывода заголовка
 void writeHeader(ofstream& fout)
 {
     fout << left
