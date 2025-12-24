@@ -6,6 +6,7 @@
 #include <tuple>
 #include <fstream>
 #include <iomanip>
+#include <random>
 
 #include"FormatFileOuter.h"
 #include"Ellipsoid.h"
@@ -29,9 +30,10 @@ int determineLayer(double x, double y, double z,
 }
 
 // Случайный коэффициент от 0 до 1
-inline double randomCoeff()
-{
-    return double(rand()) / RAND_MAX; 
+inline double randomCoeff(std::mt19937 &gen)
+{   
+    static thread_local std::uniform_real_distribution<double> dist(0.0,1.0);
+    return dist(gen);
 }
 
 // Генерация случайной точки внутри элемента
@@ -40,10 +42,11 @@ void randomPointInElement(
     double y0, double y1,
     double z0, double z1,
     double &x, double &y, double &z)
-{
-    x = x0 + randomCoeff() * (x1 - x0);
-    y = y0 + randomCoeff() * (y1 - y0);
-    z = z0 + randomCoeff() * (z1 - z0);
+{   
+    std::mt19937 gen(1234 + omp_get_thread_num());
+    x = x0 + randomCoeff(gen) * (x1 - x0);
+    y = y0 + randomCoeff(gen) * (y1 - y0);
+    z = z0 + randomCoeff(gen) * (z1 - z0);
 }
 
 // =============================================================
@@ -66,6 +69,7 @@ void MonteCarloMethod(
     for (int t = 0; t < Nsamples; t++)
     {
         double x, y, z;
+
         randomPointInElement(x0, x1, y0, y1, z0, z1, x, y, z);
 
         int L = determineLayer(x, y, z, E1, E2, E3);
@@ -106,6 +110,9 @@ int main()
         ofstream fout(fileName);
         writeHeader(fout);
 
+        double t_start = omp_get_wtime();
+
+
         #pragma omp parallel
         {
             std::ostringstream local_buffer;  
@@ -125,7 +132,7 @@ int main()
                         double frac[4];
                         MonteCarloMethod(x0,x1, y0,y1, z0,z1, E1, E2, E3, Nsamples, frac);
 
-                        // Вывод в файл с результаттами, если хотя бы одна доля в элементе > 0
+                        Вывод в файл с результаттами, если хотя бы одна доля в элементе > 0
                         if (frac[0] > 0 || frac[1] > 0 || frac[2] > 0)
                         {
                             #pragma omp critical
@@ -138,9 +145,14 @@ int main()
                 fout << local_buffer.str();
             }
         } 
+        double t_end = omp_get_wtime();
+        double elapsed = t_end - t_start;
 
         fout.close();
+        int threads = omp_get_max_threads();
+        cout << "Time for " << threads << " threads: " << elapsed << " seconds" << endl;
         cout << "Data is saved to" <<fileName<<endl;
+
     }
     return 0;
 }
